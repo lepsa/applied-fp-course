@@ -1,4 +1,6 @@
 {
   "foo": 33,
-  "bar": "Fred"
+  "bar": "Fred",
+  "port": 8082,
+  "msg": "aaaaaa"
 }

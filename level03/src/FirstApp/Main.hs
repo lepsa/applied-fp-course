@@ -17,7 +17,7 @@ import           Data.Monoid              ((<>))
 
 import           Data.Text                (Text)
 import           Data.Text.Encoding       (decodeUtf8)
-
+import FirstApp.Conf (Conf, port, getPort, msg, getHelloMsg, parseOptions)
 import           FirstApp.Types           (ContentType (PlainText), Error (EmptyCommentText, EmptyTopic, UnknownRoute),
                                            RqType (AddRq, ListRq, ViewRq),
                                            mkCommentText, mkTopic,
@@ -26,11 +26,12 @@ import           FirstApp.Types           (ContentType (PlainText), Error (Empty
 runApp :: IO ()
 runApp = do
   -- Load up the configuration by providing a ``FilePath`` for the JSON config file.
-  cfgE <- error "configuration not implemented"
+  let fp = "appconfig.json"
+  cfgE <- parseOptions fp
   -- Loading the configuration can fail, so we have to take that into account now.
   case cfgE of
-    Left err   -> undefined
-    Right _cfg ->  run undefined undefined
+    Left err   -> print err
+    Right cfg ->  run (fromIntegral . getPort . port $ cfg) $ app cfg
 
 -- | Some helper functions to make our lives a little more DRY.
 mkResponse
@@ -38,8 +39,8 @@ mkResponse
   -> ContentType
   -> LBS.ByteString
   -> Response
-mkResponse sts ct msg =
-  responseLBS sts [(hContentType, renderContentType ct)] msg
+mkResponse sts ct msg' =
+  responseLBS sts [(hContentType, renderContentType ct)] msg'
 
 resp200
   :: ContentType
@@ -65,7 +66,7 @@ resp400 =
 
 -- Now that we have our configuration, pass it where it needs to go.
 app
-  :: a
+  :: Conf
   -> Application
 app cfg rq cb =
   (handleRespErr . handleRErr <$> mkRequest rq) >>= cb
@@ -80,11 +81,11 @@ app cfg rq cb =
 -- Now we have some config, we can pull the ``helloMsg`` off it and use it in
 -- the response.
 handleRequest
-  :: a
+  :: Conf
   -> RqType
   -> Either Error Response
-handleRequest _cfg (AddRq _ _) =
-  Right $ resp200 PlainText ("App says: " <> undefined)
+handleRequest cfg (AddRq _ _) =
+  Right $ resp200 PlainText ("App says: " <> (getHelloMsg $ msg cfg))
 handleRequest _ (ViewRq _) =
   Right $ resp200 PlainText "View Request not implemented"
 handleRequest _ ListRq =

@@ -10,6 +10,8 @@ import qualified Data.ByteString.Lazy.Char8 as LBS8
 
 import qualified FirstApp.Conf              as Conf
 import qualified FirstApp.Main              as Main
+import Data.Semigroup ((<>))
+import Data.String (fromString)
 
 main :: IO ()
 main = do
@@ -24,11 +26,11 @@ main = do
 
     Right cfg -> do
       -- We need to setup our Application.
-      let app' = undefined
+      let app' = pure $ Main.app cfg
 
       -- What function in the Hspec or Hspec.Wai package do we need to use here
       -- so that Hspec can manage the running of our Wai Application?
-      hspec . undefined app' $ do
+      hspec . with app' $ do
 
           -- Here is an example test for the 'ListRq' route.
           -- Start with a general description of what we're going to test.
@@ -46,3 +48,13 @@ main = do
               -- a string literal, it will assume that is the expected body of
               -- the request and also check for a 200 response code.
               get "/list" `shouldRespondWith` "List Request not implemented"
+
+          describe "View Route" $ do
+            it "Should return a 'not implemented' message and 200 status" $
+              get "/foo/view" `shouldRespondWith` "View Request not implemented"
+          describe "Add Route" $ do
+            it "Should return the confir msg and a 200 status" $
+              post
+              "/foo/add" "asdasd" `shouldRespondWith` (fromString $ "App says: " <> (LBS8.unpack . Conf.getHelloMsg . Conf.helloMsg $ cfg))
+            it "Should return an empty comment warning" $
+              post "/foo/add" "" `shouldRespondWith` "Empty Comment" { matchStatus = 400 }

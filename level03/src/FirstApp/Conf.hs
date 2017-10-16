@@ -8,7 +8,7 @@ module FirstApp.Conf
     , confPortToWai
     ) where
 
-import           Control.Exception          (catch)
+import           Control.Exception          (catch, SomeException)
 
 import           GHC.Word                   (Word16)
 
@@ -31,7 +31,8 @@ import           Options.Applicative        (Parser, ParserInfo, eitherReader,
                                              option, optional, progDesc, short,
                                              strOption)
 
-import           Text.Read                  (readEither)
+import           Text.Read                  (readEither, readMaybe)
+import Data.Bifunctor (first)
 
 -- Doctest setup section
 -- $setup
@@ -49,6 +50,10 @@ newtype HelloMsg = HelloMsg
 -- - A customisable port number: ``Port``
 -- - A changeable message for our users: ``HelloMsg``
 data Conf = Conf
+  { port :: Port
+  , msg  :: HelloMsg
+  }
+  deriving (Eq, Show)
 
 -- We're storing our Port as a Word16 to be more precise and prevent invalid
 -- values from being used in our application. However Wai is not so stringent.
@@ -57,12 +62,14 @@ data Conf = Conf
 confPortToWai
   :: Conf
   -> Int
-confPortToWai =
-  error "portToInt not implemented"
+confPortToWai = fromInteger . toInteger . getPort . port
 
 -- Similar to when we were considering our application types, leave this empty
 -- for now and add to it as you go.
-data ConfigError = ConfigError
+data ConfigError = MissingPort
+                 | MissingMsg
+                 | ParseError String
+                 | FileError String
   deriving Show
 
 -- Our application will be able to load configuration from both a file and
@@ -89,21 +96,27 @@ data ConfigError = ConfigError
 -- To make this easier, we'll make a new type ``PartialConf`` that will have our
 -- ``Last`` wrapped values. We can then define a ``Monoid`` instance for it and
 -- have our ``Conf`` be a known good configuration.
-data PartialConf
+data PartialConf = PartialConf
+   { mPort :: Last Port
+   , mMsg  :: Last HelloMsg
+   }
 
 -- We now define our ``Monoid`` instance for ``PartialConf``. Allowing us to
 -- define our always empty configuration, which would always fail our
 -- requirements. More interestingly, we define our ``mappend`` function to lean
 -- on the ``Monoid`` instance for Last to always get the last value.
 instance Monoid PartialConf where
+  mempty      = PartialConf (Last Nothing) (Last Nothing)
+  mappend a b = PartialConf (mPort a <> mPort b) (mMsg a <> mMsg b)
 
 -- For the purposes of this application we will encode some default values to
 -- ensure that our application continues to function in the event of missing
 -- configuration values from either the file or command line inputs.
 defaultConf
   :: PartialConf
-defaultConf =
-  error "defaultConf not implemented"
+defaultConf = PartialConf
+  (Last . Just $ Port 8080)
+  (Last . Just $ HelloMsg "Hello World")
 
 -- We need something that will take our PartialConf and see if can finally build
 -- a complete ``Conf`` record. Also we need to highlight any missing values by
@@ -111,8 +124,12 @@ defaultConf =
 makeConfig
   :: PartialConf
   -> Either ConfigError Conf
-makeConfig =
-  error "makeConfig not implemented"
+makeConfig (PartialConf p m) =
+  Conf <$> fromEither MissingPort (getLast p)
+       <*> fromEither MissingMsg (getLast m)
+  where
+    fromEither :: e -> Maybe a -> Either e a
+    fromEither e = maybe (Left e) Right
 
 -- This is the function we'll actually export for building our configuration.
 -- Since it wraps all our efforts to read information from the command line, and
@@ -120,9 +137,12 @@ makeConfig =
 parseOptions
   :: FilePath
   -> IO (Either ConfigError Conf)
-parseOptions =
-  error "parseOptions not implemented"
-
+parseOptions p = do
+  fe <- parseJSONConfigFile p
+  c  <- execParser commandLineParser
+  let partialE = (\f -> defaultConf <> f <> c) <$> fe
+  pure $ partialE >>= makeConfig
+  
 -- | File Parsing
 
 -- We're trying to avoid complications when selecting a configuration file
@@ -149,8 +169,10 @@ fromJsonObjWithKey
   -> (a -> b)
   -> Aeson.Object
   -> Last b
-fromJsonObjWithKey =
-  error "fromJsonObjWithKey not implemented"
+fromJsonObjWithKey k f o = maybe (Last Nothing) (Last . fmap f) m 
+  where
+    m :: FromJSON a => Maybe (Maybe a)
+    m = Aeson.parseMaybe (Aeson..:? k) o
 
 -- |----
 -- | You will need to update these tests when you've completed the following functions!
@@ -159,7 +181,7 @@ fromJsonObjWithKey =
 
 -- | decodeObj
 -- >>> decodeObj ""
--- Left (undefined "Error in $: not enough input")
+-- Left (ParseError "Error in $: not enough input")
 --
 -- >>> decodeObj "{\"bar\":33}"
 -- Right (fromList [("bar",Number 33.0)])
@@ -167,14 +189,14 @@ fromJsonObjWithKey =
 decodeObj
   :: ByteString
   -> Either ConfigError Aeson.Object
-decodeObj =
-  error "decodeObj not implemented"
+decodeObj bs = 
+  first ParseError $ Aeson.eitherDecode bs
 
 -- | Update these tests when you've completed this function.
 --
 -- | readObject
 -- >>> readObject "badFileName.no"
--- Left (undefined badFileName.no: openBinaryFile: does not exist (No such file or directory))
+-- Left (FileError "badFileName.no: openBinaryFile: does not exist (No such file or directory)")
 --
 -- >>> readObject "test.json"
 -- Right "{\"foo\":33}\n"
@@ -182,8 +204,10 @@ decodeObj =
 readObject
   :: FilePath
   -> IO ( Either ConfigError ByteString )
-readObject =
-  error "readObject not implemented"
+readObject p = catch (Right <$> LBS.readFile p) err
+  where
+    err :: SomeException -> IO (Either ConfigError a)
+    err = pure . Left . FileError . show
 
 -- Construct the function that will take a ``FilePath``, read it in and attempt
 -- to decode it as a valid JSON object, using the ``aeson`` package. Then pull
@@ -191,9 +215,22 @@ readObject =
 -- function we wrote above to assist in pulling items off the object.
 parseJSONConfigFile
   :: FilePath
-  -> IO PartialConf
-parseJSONConfigFile =
-  error "parseJSONConfigFile not implemented"
+  -> IO (Either ConfigError PartialConf)
+parseJSONConfigFile p =
+  (fmap f . decodeObj =<<) <$> readObject p
+  where
+    f :: Aeson.Object -> PartialConf
+    f o = 
+      let port' = fromJsonObjWithKey "port" Port o
+          msg'  = fromJsonObjWithKey "msg"  (HelloMsg . fromString) o
+      in PartialConf port' msg'
+
+--fromJsonObjWithKey
+--  :: FromJSON a
+--  => Text
+--  -> (a -> b)
+--  -> Aeson.Object
+--  -> Last b
 
 -- | Command Line Parsing
 
@@ -217,28 +254,28 @@ commandLineParser =
 partialConfParser
   :: Parser PartialConf
 partialConfParser =
-  error "partialConfParser not implemented"
+  PartialConf <$> portParser <*> helloMsgParser
 
 -- Parse the Port value off the command line args and into a Last wrapper.
 portParser
   :: Parser (Last Port)
 portParser =
   let
-    -- mods = long "port"
-    --        <> short 'p'
-    --        <> metavar "PORT"
-    --        <> help "TCP Port to accept requests on"
+    mods =  long "port"
+         <> short 'p'
+         <> metavar "PORT"
+         <> help "TCP Port to accept requests on"
   in
-    error "portParser not implemented"
+    Last . fmap Port . (readMaybe =<<) <$> (optional $ strOption mods)
 
 -- Parse the HelloMsg from the input string into our type and into a Last wrapper.
 helloMsgParser
   :: Parser (Last HelloMsg)
 helloMsgParser =
   let
-    -- mods = long "hello-msg"
-    --        <> short 'm'
-    --        <> metavar "HELLOMSG"
-    --        <> help "Message to respond to requests with."
+    mods = long "hello-msg"
+         <> short 'm'
+         <> metavar "HELLOMSG"
+         <> help "Message to respond to requests with."
   in
-    error "helloMsgParser not implemented"
+    (fmap (HelloMsg . fromString) . Last) <$> (optional $ strOption mods)
