@@ -28,7 +28,9 @@ import           Data.Text       (Text)
 -- AddRq : Which needs the target topic, and the body of the comment.
 -- ViewRq : Which needs the topic being requested.
 -- ListRq : Which doesn't need anything and lists all of the current topics.
-data RqType = RqType
+data RqType = AddRq Topic CommentText
+            | ViewRq Topic
+            | ListRq
 
 -- Not everything goes according to plan, but it's important that our types
 -- reflect when errors can be introduced into our program. Additionally it's
@@ -36,11 +38,13 @@ data RqType = RqType
 
 -- Leave this type empty for now, and we'll fill in the error constructors we
 -- need as we progress through the application.
-data Error = Error
+data Error = EmptyTopic
+           | EmptyComment
+           | UnknownRoute
 
 -- Provide a type to list our response content types so we don't try to do the
 -- wrong thing with what we meant to be used as text or JSON etc.
-data ContentType = ContentType
+data ContentType = JSON | TEXT
 
 -- The ``ContentType`` constructors don't match what is required for the header
 -- information, so write a function that will take our ``ContentType`` and
@@ -48,8 +52,8 @@ data ContentType = ContentType
 renderContentType
   :: ContentType
   -> ByteString
-renderContentType =
-  error "renderContentType not implemented"
+renderContentType JSON = "application/json"
+renderContentType TEXT = "text/plain"
 
 -- In Haskell the ``newtype`` is a wrapper of sorts that comes with zero runtime
 -- cost. It is purely used for type-checking. So when you have a bare primitive
@@ -79,26 +83,26 @@ newtype CommentText = CommentText Text
 -- The export list at the top of this file demonstrates how to export a type,
 -- but not export the constructor.
 
+mkText :: Text -> (Text -> a) -> Error -> Either Error a
+mkText "" _ e = Left e
+mkText t f _ = Right $ f t
+
 mkTopic
   :: Text
   -> Either Error Topic
-mkTopic =
-  error "mkTopic not implemented"
+mkTopic t = mkText t Topic EmptyTopic 
 
 getTopic
   :: Topic
   -> Text
-getTopic =
-  error "getTopic not implemented"
+getTopic (Topic t) = t
 
 mkCommentText
   :: Text
   -> Either Error CommentText
-mkCommentText =
-  error "mkCommentText not implemented"
+mkCommentText t = mkText t CommentText EmptyComment
 
 getCommentText
   :: CommentText
   -> Text
-getCommentText =
-  error "getCommentText not implemented"
+getCommentText (CommentText t) = t
