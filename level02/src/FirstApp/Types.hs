@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# OPTIONS_GHC -fno-warn-dodgy-exports #-}
 module FirstApp.Types
   ( Topic
   , CommentText
@@ -23,7 +24,7 @@ import           Data.Text       (Text)
 -- - View a topic and its comments
 -- - List the current topics
 
--- To that end, we will create the following constructors for our RqType:
+-- To that end, create the following constructors for our RqType:
 
 -- AddRq : Which needs the target topic, and the body of the comment.
 -- ViewRq : Which needs the topic being requested.

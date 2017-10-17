@@ -20,7 +20,6 @@ import           FirstApp.Types           (ContentType (..), Error (..), RqType 
                                            mkCommentText, mkTopic,
                                            renderContentType)
 
-
 -- --------------------------------------------
 -- - Don't start here, go to FirstApp.Types!  -
 -- --------------------------------------------
