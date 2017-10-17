@@ -26,7 +26,7 @@ import qualified Database.SQLite.Simple             as Sql
 import qualified Database.SQLite.SimpleErrors       as Sql
 import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
 
-import           FirstApp.DB.Types                  (FirstAppDB (FirstAppDB, dbConn),
+import           FirstApp.DB.Types                  (FirstAppDB (FirstAppDB, dbConn, dbTable),
                                                      Table (Table, getTableName))
 import           FirstApp.Error                     (Error (DBError))
 import           FirstApp.Types                     (Comment, CommentText,
@@ -77,8 +77,9 @@ withTable t = Sql.Query
 withTableM
   :: Query
   -> AppM Query
-withTableM =
-  error "withTableM not implemented"
+withTableM q = do
+  t <- asks $ dbTable . envDb
+  pure $ withTable t q
 
 initDb
   :: FilePath

@@ -113,8 +113,8 @@ runAppM
   :: Env
   -> AppM a
   -> IO (Either Error a)
-runAppM =
-  error "runAppM not reimplemented"
+runAppM e m =
+  runExceptT $ runReaderT (unAppM m) e
 
 -- This is a helper function that will `lift` an Either value into our new AppM
 -- by applying `throwError` to the Left value, and using `pure` to lift the
@@ -127,4 +127,4 @@ throwL
   :: Either Error a
   -> AppM a
 throwL =
-  error "throwL not implemented"
+  either throwError pure

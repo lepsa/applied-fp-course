@@ -6,7 +6,7 @@ module FirstApp.Main
   ) where
 
 import           Control.Monad.Except               (ExceptT (ExceptT),
-                                                     runExceptT)
+                                                     runExceptT, withExceptT)
 import           Control.Monad.IO.Class             (liftIO)
 
 import           Network.Wai                        (Application, Request,
@@ -71,13 +71,13 @@ runApp = do
 -- final Either value.
 prepareAppReqs
   :: IO (Either StartUpError Env)
-prepareAppReqs = do
+prepareAppReqs = runExceptT $ do
   cfg <- initConf
   db <- initDB cfg
-  pure $ Right ( Env cfg db )
+  pure $ Env cfg db
   where
-    toStartUpErr =
-      error "toStartUpErr not reimplemented"
+    toStartUpErr :: (a -> StartUpError) -> IO (Either a b) -> ExceptT StartUpError IO b
+    toStartUpErr f = withExceptT f . ExceptT
 
     -- Take our possibly failing configuration/db functions with their unique
     -- error types and turn them into a consistently typed ExceptT. We can then
