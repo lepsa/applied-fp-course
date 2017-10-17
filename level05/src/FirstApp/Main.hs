@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module FirstApp.Main
   ( runApp
   , prepareAppReqs
@@ -35,7 +37,7 @@ import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
 import qualified FirstApp.Conf                      as Conf
 import qualified FirstApp.DB                        as DB
 import           FirstApp.Types                     (ContentType (JSON, PlainText),
-                                                     Error (EmptyCommentText, EmptyTopic, UnknownRoute),
+                                                     Error (EmptyCommentText, EmptyTopic, UnknownRoute, DbError),
                                                      RqType (AddRq, ListRq, ViewRq),
                                                      mkCommentText, mkTopic,
                                                      renderContentType)
@@ -49,13 +51,22 @@ data StartUpError
   deriving Show
 
 runApp :: IO ()
-runApp =
-  error "runApp needs re-implementing"
+runApp = do
+  cfgE <- prepareAppReqs
+  case cfgE of
+    Left err        -> print err
+    Right (cfg, db) -> run (Conf.confPortToWai cfg) $ app cfg db
 
 prepareAppReqs
   :: IO (Either StartUpError (Conf.Conf,DB.FirstAppDB))
-prepareAppReqs =
-  error "prepareAppReqs not implemented"
+prepareAppReqs = do
+  confE <- Conf.parseOptions path
+  dbE   <- DB.initDb "db.sqlite" $ DB.Table "comments"
+  let confE' = either (Left . ConfErr) Right confE
+  let dbE' = either (Left . DbInitErr) Right dbE
+  pure $ (,) <$> confE' <*> dbE'
+  where
+    path = "appconfig.json"
 
 -- | Some helper functions to make our lives a little more DRY.
 mkResponse
@@ -125,12 +136,12 @@ handleRequest
   -> DB.FirstAppDB
   -> RqType
   -> IO (Either Error Response)
-handleRequest _ _db (AddRq _ _) =
-  fmap (const ( resp200 PlainText "Success" )) <$> error "AddRq handler not implemented"
-handleRequest _ _db (ViewRq _)  =
-  error "ViewRq handler not implemented"
-handleRequest _ _db ListRq      =
-  error "ListRq handler not implemented"
+handleRequest _ db (AddRq t c) =
+  fmap (const ( resp200 PlainText "Success" )) <$> DB.addCommentToTopic db t c
+handleRequest _ db (ViewRq t)  =
+  fmap (resp200 JSON . A.encode) <$> DB.getComments db t
+handleRequest _ db ListRq      =
+  fmap (resp200 JSON . A.encode) <$> DB.getTopics db
 
 mkRequest
   :: Request
@@ -178,3 +189,5 @@ mkErrorResponse EmptyCommentText =
   resp400 PlainText "Empty Comment"
 mkErrorResponse EmptyTopic =
   resp400 PlainText "Empty Topic"
+mkErrorResponse (DbError _) =
+  resp500 PlainText "Internal DB Error"  

@@ -11,6 +11,11 @@ import           Database.SQLite.Simple.FromRow (FromRow (fromRow), field)
 -- store in the database. In this instance, it is the raw types that make up a
 -- comment.
 data DbComment = DbComment
+  { dbCommnetId      :: Int
+  , dbCommentTopic   :: Text
+  , dbCommentCommnet :: Text
+  , dbCommentTime    :: UTCTime
+  }
   deriving Show
 
 -- This Typeclass comes from the `sqlite-simple` package and describes how to
@@ -18,3 +23,8 @@ data DbComment = DbComment
 -- type. This technique of translating a result row to a type will differ
 -- between different packages/databases.
 instance FromRow DbComment where
+  fromRow = DbComment
+          <$> field
+          <*> field
+          <*> field
+          <*> field

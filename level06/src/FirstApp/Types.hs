@@ -135,6 +135,7 @@ data RqType
   = AddRq Topic CommentText
   | ViewRq Topic
   | ListRq
+  | DeleteRq Topic
 
 data Error
   = UnknownRoute

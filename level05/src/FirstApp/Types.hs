@@ -20,23 +20,34 @@ import           GHC.Generics      (Generic)
 
 import           Data.ByteString   (ByteString)
 import           Data.Text         (Text)
-
-import           Data.List         (stripPrefix)
+import           Data.List         (stripPrefix, uncons)
 import           Data.Maybe        (fromMaybe)
-
+import           Data.Char         (toLower)
 import           Data.Aeson        (ToJSON (toJSON))
 import qualified Data.Aeson        as A
 import qualified Data.Aeson.Types  as A
 
 import           Data.Time         (UTCTime)
 
-import           FirstApp.DB.Types (DbComment)
+import           FirstApp.DB.Types (DbComment (..))
+import Database.SQLite.Simple.ToField (ToField, toField)
+import Database.SQLite.Simple.FromField (FromField, fromField)
+import Control.Exception (Exception)
+import Database.SQLite.Simple (SQLError)
 
 newtype Topic = Topic Text
   deriving (Show, ToJSON)
+instance ToField Topic where
+  toField (Topic t) = toField t
+instance FromField Topic where
+  fromField = fmap Topic . fromField
 
 newtype CommentText = CommentText Text
   deriving (Show, ToJSON)
+instance ToField CommentText where
+  toField (CommentText t) = toField t
+instance FromField CommentText where
+  fromField = fmap CommentText . fromField
 
 -- This is the `Comment` record that we will be sending to users, it's a simple
 -- record type, containing an `Int`, `Topic`, `CommentText`, and `UTCTime`.
@@ -69,8 +80,12 @@ data Comment = Comment
 modFieldLabel
   :: String
   -> String
-modFieldLabel =
-  error "modFieldLabel not implemented"
+modFieldLabel t =
+  fromMaybe t (f <$> (uncons =<< stripPrefix prefix t))
+  where
+    f :: (Char, String) -> String
+    f (c, s) = toLower c : s
+    prefix = "comment"
 
 instance ToJSON Comment where
   -- This is one place where we can take advantage of our `Generic` instance.
@@ -95,8 +110,11 @@ instance ToJSON Comment where
 fromDbComment
   :: DbComment
   -> Either Error Comment
-fromDbComment =
-  error "fromDbComment not yet implemented"
+fromDbComment (DbComment dbId topic body time) = Comment
+  <$> (pure $ CommentId dbId)
+  <*> (nonEmptyText id EmptyTopic topic >>= mkTopic)
+  <*> (nonEmptyText id EmptyCommentText body >>= mkCommentText)
+  <*> pure time
 
 nonEmptyText
   :: (Text -> a)
@@ -140,6 +158,7 @@ data Error
   | EmptyCommentText
   | EmptyTopic
   -- We need another constructor for our DB error types.
+  | DbError SQLError
   deriving Show
 
 data ContentType

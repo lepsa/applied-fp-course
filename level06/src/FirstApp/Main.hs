@@ -38,10 +38,10 @@ import qualified FirstApp.DB                        as DB
 import qualified FirstApp.Responses                 as Res
 import           FirstApp.Types                     (ContentType (PlainText),
                                                      Error (DBError, EmptyCommentText, EmptyTopic, UnknownRoute),
-                                                     RqType (AddRq, ListRq, ViewRq),
+                                                     RqType (DeleteRq, AddRq, ListRq, ViewRq),
                                                      mkCommentText, mkTopic)
 
-import           FirstApp.AppM                      (AppM, Env (Env, envConfig, envDb, envLoggingFn))
+import           FirstApp.AppM                      (AppM, runAppM, Env (Env, envConfig, envDb, envLoggingFn))
 
 -- Our start-up is becoming more complicated and could fail in new and
 -- interesting ways. But we also want to be able to capture these errors in a
@@ -96,8 +96,8 @@ prepareAppReqs = do
 app
   :: Env
   -> Application
-app _env rq _cb =
-  error "app not implemented"
+app env rq cb =
+  runAppM env requestToResponse >>= cb
   where
     -- Now that our request handling and response creating functions operate
     -- within our AppM context, we need to run the AppM to get our IO action out
@@ -141,6 +141,8 @@ handleRequest rqType = do
       fmap Res.resp200Json <$> DB.getComments db t
     ListRq    ->
       fmap Res.resp200Json <$> DB.getTopics db
+    DeleteRq t ->
+      pure (Res.resp200 PlainText "Success") <$ DB.deleteTopic db t
 
 mkRequest
   :: Request

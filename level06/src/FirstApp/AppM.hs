@@ -77,5 +77,4 @@ runAppM
   :: Env
   -> AppM a
   -> IO a
-runAppM =
-  error "runAppM not implemented"
+runAppM e m = runReaderT (unAppM m) e

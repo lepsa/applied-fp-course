@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import           Control.Monad  (join)
+import           Control.Monad  (join, (<=<))
 
 import           Test.Hspec
 import           Test.Hspec.Wai
@@ -29,7 +29,10 @@ main = do
           -- Write a function to clear the comments for a specific topic.
           -- This will be run before each test is run.
           flushTopic =
-            error "Flush topic not implemented"
+            either print f $ Types.mkTopic "fudge"
+            where
+              f :: Types.Topic -> IO ()
+              f = either print pure <=< DB.deleteTopic (AppM.envDb env)
 
       -- Run the tests with a DB topic flush between each spec
       hspec . with ( flushTopic >> app' ) $ do
